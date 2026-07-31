@@ -26,6 +26,7 @@ let appVersionCtrl = appVersion;
 if (isLocal()) {
   // @ts-ignore
   appCtrl = localCtrl.app;
+  // @ts-ignore
   appVersionCtrl = localCtrl.appVersion;
   hmn = localCtrl.hmn;
 }

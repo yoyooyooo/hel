@@ -1,7 +1,7 @@
 import { models } from 'at/models';
 import * as objUtil from 'at/utils/obj';
 
-export async function get(where, options?: any) {
+export async function get(where: any, options?: any) {
   const { page = 0, size = 20, order = [['create_at', 'DESC']] } = options || {};
 
   let rows = await models.subAppVersion.findAll({
@@ -25,7 +25,7 @@ export async function get(where, options?: any) {
   return rowsParsed;
 }
 
-export async function getOne(where, options?: any) {
+export async function getOne(where: any, options?: any) {
   const rowsParsed = await get(where, options);
   return rowsParsed[0];
 }
@@ -40,7 +40,7 @@ function ensureDataCorrect(toAdd: any) {
   return rawData;
 }
 
-export async function update(toUpdate, where?: any) {
+export async function update(toUpdate: any, where?: any) {
   if (objUtil.isNull(where)) {
     throw new Error('miss where while update subAppVersion, it is dangerous!');
   }
@@ -60,7 +60,7 @@ export async function bulkAdd(toAdds: Array<Partial<nsModel.SubAppVersionParsed>
   return res;
 }
 
-export async function count(where) {
+export async function count(where: any) {
   const countVal = await models.subAppVersion.count({ where });
   return countVal;
 }

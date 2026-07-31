@@ -1,6 +1,12 @@
+import type { ISubAppVersion, ISubApp } from "hel-types";
 import type { ICuteExpressCtx } from 'at/types';
 import regs from 'at/utils/regs';
-import type { ISubAppVersion } from 'hel-types';
+
+export function ensureVersion(app: ISubApp, version: ISubAppVersion) {
+  version.sub_app_id = String(app.id);
+  Reflect.deleteProperty(version, 'create_at');
+  Reflect.deleteProperty(version, 'update_at');
+}
 
 export function fillVersionForCreate(version: ISubAppVersion) {
   const ensureValue = (prop: string, defaultVal = '') => {
@@ -57,8 +63,9 @@ export function getVersionTag(versionIndex: string) {
  */
 export function assignNameAndVerToQuery(ctx: ICuteExpressCtx) {
   const { params, query } = ctx.req;
-  const { scope, versionIndex } = params;
+  const { scope } = params;
   const queryVer = query.version || query.ver || '';
+  const versionIndex = String(params.versionIndex);
 
   // 命中了 meta/:versionIndex 路由
   if (!scope) {

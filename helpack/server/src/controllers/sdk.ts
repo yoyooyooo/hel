@@ -1,23 +1,51 @@
 import { ASSET_WEB_DIR } from 'at/configs/path';
+import dao from 'at/dao';
 import { TController } from 'at/types';
-import { ISubAppUpdate } from 'at/types/domain';
+import { ISubAppUpdate, SubAppVersion } from 'at/types/domain';
+import { delay } from 'at/utils/timer';
 import * as appCtrl from 'controllers/app';
 import * as appVerCtrl from 'controllers/appVersion';
 import { checkAppName } from 'controllers/share/app';
 import { checkClassData, checkUserName } from 'controllers/share/check';
 import { lockLogic } from 'controllers/share/lock';
-import { checkVersionIndex } from 'controllers/share/version';
-import { ISubApp, ISubAppVersion } from 'hel-types';
+import { checkVersionIndex, ensureVersion } from 'controllers/share/version';
+import { ISubAppVersion } from 'hel-types';
 import { has } from 'lodash';
 import { transferWebFiles } from 'services/fileTransfer';
 
-const inner = {
-  ensureVersion(app: ISubApp, version: ISubAppVersion) {
-    version.sub_app_id = String(app.id);
-    Reflect.deleteProperty(version, 'create_at');
-    Reflect.deleteProperty(version, 'update_at');
-  },
-};
+interface IUploadResult {
+  totalCount: number;
+  finished: boolean;
+  uploadedFiles: string[];
+  pendingFiles: string[];
+  errMsg: string;
+}
+
+async function uploadFiles(
+  id: number | string,
+  params: { pathList: string[], verData: SubAppVersion, uploadResult: IUploadResult },
+) {
+  const { pathList, verData, uploadResult } = params;
+  const { webDirPath } = verData.src_map;
+  const start = Date.now();
+  const { pendingFiles, uploadedFiles } = uploadResult;
+  try {
+    for (const path of pathList) {
+      // 下载资源上传到 helpack 内置cdn
+      await transferWebFiles(webDirPath, [path]);
+      pendingFiles.splice(0, 1);
+      uploadedFiles.push(path);
+      await dao.uploadCos.update({ id, upload_result: { ...uploadResult, finished: false } });
+    }
+
+    await dao.uploadCos.update({ id, upload_result: { ...uploadResult, finished: true }, upload_spend_time: Date.now() - start });
+    uploadResult.finished = true;
+  } catch (err: any) {
+    const errMsg = err.message;
+    await dao.uploadCos.update({ id, upload_result: { ...uploadResult, finished: false, errMsg } });
+  }
+}
+
 
 /**
  * 新增版本
@@ -50,7 +78,7 @@ export const addVersion: TController<any, any, { version: ISubAppVersion; classK
     throw new Error('nonce invalid');
   }
 
-  inner.ensureVersion(app, version);
+  ensureVersion(app, version);
   const verAdded = await srv.appVersion.addAppVersion(version);
 
   // 添加版本后更新 app.build_version
@@ -78,72 +106,56 @@ export const queryBackupAssetsProgress: TController<any, any, { version: ISubApp
     throw new Error(`app [${appName}] not exist`);
   }
   const classInfo = await checkClassData(app.class_key);
-
   const signStr = srv.app.signAppVersionForSdk(version, timestamp, classInfo.class_token);
   if (nonce !== signStr) {
     throw new Error('nonce invalid');
   }
-
   const ver = await dao.subAppVersion.getOne({ id: parseInt(dbId, 10) });
   if (!ver) {
     throw new Error(`ver ${sub_app_version} not found`);
   }
-
   const cosLog = await dao.uploadCos.getOne({ app_version: sub_app_version });
-  if (!cosLog) {
-    // 首次调用进度查询，触发资源上传
-    const { chunkJsSrcList, chunkCssSrcList, webDirPath } = ver.src_map;
-    const pathList = chunkJsSrcList.concat(chunkCssSrcList);
-    if (!pathList.every((item) => item.startsWith(webDirPath))) {
-      throw new Error(`validate error: found asset url not start with ${webDirPath}`);
-    }
-    if (pathList.some((item) => item.startsWith(ASSET_WEB_DIR))) {
-      throw new Error(`validate error: found asset url start with ${ASSET_WEB_DIR}`);
-    }
-
-    const uploadedFiles: string[] = [];
-    const pendingFiles = pathList.slice();
-    const totalCount = pathList.length;
-
-    const { objJson } = await dao.uploadCos.add({
-      app_name: appName,
-      app_version: sub_app_version,
-      file_web_path: {
-        pathList,
-      },
-      upload_result: {
-        totalCount,
-        finished: false,
-        uploadedFiles,
-        pendingFiles,
-        errMsg: '',
-      },
-      upload_spend_time: 0,
-    });
-
-    const { update } = dao.uploadCos;
-    const resultCommon = { uploadedFiles, pendingFiles, totalCount, errMsg: '' };
-    const id = objJson.id;
-    try {
-      const start = Date.now();
-      for (const path of pathList) {
-        // 下载资源上传到 helpack 内置cdn
-        await transferWebFiles(webDirPath, [path]);
-        pendingFiles.splice(0, 1);
-        uploadedFiles.push(path);
-        await update({ id, upload_result: { ...resultCommon, finished: false } });
-      }
-
-      await update({ id, upload_result: { ...resultCommon, finished: true }, upload_spend_time: Date.now() - start });
-    } catch (err) {
-      const errMsg = err.message;
-      await update({ id, upload_result: { ...resultCommon, finished: false, errMsg } });
-      throw new Error(errMsg);
-    }
-  } else {
-    // 返回上传进度
+  // 返回上传进度
+  if (cosLog) {
     return cosLog.upload_result;
   }
+
+  // 首次调用进度查询，触发资源上传
+  const { chunkJsSrcList, chunkCssSrcList, webDirPath } = ver.src_map;
+  const pathList = chunkJsSrcList.concat(chunkCssSrcList);
+  if (!pathList.every((item) => item.startsWith(webDirPath))) {
+    throw new Error(`validate error: found asset url not start with ${webDirPath}`);
+  }
+  if (pathList.some((item) => item.startsWith(ASSET_WEB_DIR))) {
+    throw new Error(`validate error: found asset url start with ${ASSET_WEB_DIR}`);
+  }
+
+  const uploadedFiles: string[] = [];
+  const pendingFiles = pathList.slice();
+  const totalCount = pathList.length;
+  const uploadResult = {
+    totalCount,
+    finished: false,
+    uploadedFiles,
+    pendingFiles,
+    errMsg: '',
+  };
+
+  const { objJson } = await dao.uploadCos.add({
+    app_name: appName,
+    app_version: sub_app_version,
+    file_web_path: {
+      pathList,
+    },
+    upload_result: uploadResult,
+    upload_spend_time: 0,
+  });
+
+  // 文件多的时候上传文件可能很耗时，故这里异步执行，下面等待 5 秒后返回 uploadResult 给前端
+  uploadFiles(objJson.id, { pathList, verData: ver, uploadResult });
+  await delay(5000);
+  // uploadResult.finished 可能为 false/true，前端 sdk 会自行判断
+  return uploadResult;
 };
 
 /** 通过 sdk 获得应用版本 */
