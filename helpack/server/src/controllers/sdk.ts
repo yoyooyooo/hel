@@ -21,10 +21,7 @@ interface IUploadResult {
   errMsg: string;
 }
 
-async function uploadFiles(
-  id: number | string,
-  params: { pathList: string[], verData: SubAppVersion, uploadResult: IUploadResult },
-) {
+async function uploadFiles(id: number | string, params: { pathList: string[]; verData: SubAppVersion; uploadResult: IUploadResult }) {
   const { pathList, verData, uploadResult } = params;
   const { webDirPath } = verData.src_map;
   const start = Date.now();
@@ -45,7 +42,6 @@ async function uploadFiles(
     await dao.uploadCos.update({ id, upload_result: { ...uploadResult, finished: false, errMsg } });
   }
 }
-
 
 /**
  * 新增版本

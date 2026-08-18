@@ -1,6 +1,6 @@
-import type { ISubAppVersion, ISubApp } from "hel-types";
 import type { ICuteExpressCtx } from 'at/types';
 import regs from 'at/utils/regs';
+import type { ISubApp, ISubAppVersion } from 'hel-types';
 
 export function ensureVersion(app: ISubApp, version: ISubAppVersion) {
   version.sub_app_id = String(app.id);

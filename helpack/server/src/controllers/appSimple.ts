@@ -1,7 +1,7 @@
 /*
 |--------------------------------------------------------------------------
 |
-| 适用于 simple 模式的控制器，可访问应用白名单暂时写死，  
+| 适用于 simple 模式的控制器，可访问应用白名单暂时写死，
 | TODO(done): ALLOW_APPS 后续对接七彩石 watch 模式的配置
 | TODO: 对接 lru-cache，缓存应用 30 s
 |
@@ -24,7 +24,7 @@ function prepareForSimpleMode(ctx: ICuteExpressCtx) {
     // 此处取 ver || version 是为了兼容旧格式
     const verStr = ver || version;
     // 未显式传递 name，用 version 推导
-    let strList = version.split('_');
+    let strList: string[] = version.split('_');
     strList[strList.length - 1] = '';
     strList = strList.filter((item) => !!item);
     name = strList.join('_');
@@ -97,7 +97,7 @@ export const getSubAppVersionJsonpForSimple: TController = async (ctx: ICuteExpr
       return ctx.jsonpCode(null, '404');
     }
     return ctx.jsonp(ret);
-  } catch (err) {
+  } catch (err: any) {
     return ctx.jsonpCode(null, '404', err.message);
   }
 };
@@ -107,7 +107,7 @@ export const getSubAppAndItsVersionJsonpForSimple = async (ctx: ICuteExpressCtx)
     prepareForSimpleMode(ctx);
     const ret = await appCtrl.getSubAppAndItsVersion(ctx);
     return ctx.jsonp(ret);
-  } catch (err) {
+  } catch (err: any) {
     return ctx.jsonpCode(null, '404', err.message);
   }
 };
@@ -116,7 +116,7 @@ export const batchGetSubAppAndItsVersionJsonpForSimple = async (ctx: ICuteExpres
   try {
     const resultList = await batchGetSubAppAndItsVersionForSimple(ctx);
     return ctx.jsonp(resultList);
-  } catch (err) {
+  } catch (err: any) {
     return ctx.jsonpCode(null, '404', err.message);
   }
 };
@@ -126,7 +126,7 @@ export const batchGetSubAppAndItsFullVersionJsonpForSimple = async (ctx: ICuteEx
     ctx.query.content = '1';
     const resultList = await batchGetSubAppAndItsVersionForSimple(ctx);
     return ctx.jsonp(resultList);
-  } catch (err) {
+  } catch (err: any) {
     return ctx.jsonpCode(null, '404', err.message);
   }
 };
@@ -136,7 +136,7 @@ export const getSubAppAndItsFullVersionJsonpForSimple = async (ctx: ICuteExpress
     prepareForSimpleMode(ctx);
     const ret = await appCtrl.getSubAppAndItsFullVersion(ctx);
     return ctx.jsonp(ret);
-  } catch (err) {
+  } catch (err: any) {
     return ctx.jsonpCode(null, '404', err.message);
   }
 };
